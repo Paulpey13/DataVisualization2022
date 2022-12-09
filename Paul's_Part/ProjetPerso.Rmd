@@ -1,0 +1,755 @@
+---
+title: "DataViz Paul Peyssard"
+output: html_notebook
+---
+
+Libraries
+```{r}
+library(shiny)
+library(scales)
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(stringr)
+library(readr)
+library(data.table)
+
+
+
+```
+
+Filtering HipHop Albums :
+
+```{r}
+
+#unique(aTest$genre)
+#Hip Hop, Pop, R&amp;B, Southern Hip Hop, East Coast Hip Hop,West Coast Hip Hop, Nerdcore Hip Hop, Rap Rock, French Pop, Rap Metal, Underground Hip Hop, Gangsta Rap, Experimental Hip Hop, French Hip Hop, Australian Hip Hop, Hardcore Hip Hop, French Pop&#x200E;, Political Hip Hop
+
+unique(album$genre)
+HipHopAlbums=c("Hip Hop","R&amp;B","Southern Hip Hop","East Coast Hip Hop","West Coast Hip Hop","Nerdcore Hip Hop","Rap Rock","French Pop","Rap Metal","Underground Hip Hop","Gangsta Rap","Experimental Hip Hop","French Hip Hop","Australian Hip Hop","Hardcore Hip Hop","French Pop&#x200E;","Political Hip Hop")
+albumRap=albums[albums$genre %in% HipHopAlbums,]
+
+```
+
+Filtering HipHop Artists :
+```{r}
+#length(unique(artists$genre)) #2226
+#unique(artists$genre)
+grepl(unique(artists$genre)[3], "Hip Hop")  # TRUE
+grepl('Hip Hop',unique(artists$genre)[3])  
+  
+HipHopArtists=c()
+for (i in 1:length(unique(artists$genre))){
+  if (grepl('Hip Hop',unique(artists$genre)[i])   
+      || grepl('rap',unique(artists$genre)[i] )
+      ||grepl('RAP',unique(artists$genre)[i] )
+      ||grepl('Rap',unique(artists$genre)[i] )
+      ||grepl('hip hop',unique(artists$genre)[i] )
+      ||grepl('Hip-Hop',unique(artists$genre)[i] )
+      ||grepl('R&B',unique(artists$genre)[i] )
+      ){
+    HipHopArtists=append(HipHopArtists,unique(artists$genre)[i])
+  }
+}
+ArtistRap=artists[artists$genre %in% HipHopArtists,]
+
+
+```
+
+Filtering HipHop Songs :
+
+```{r}
+
+#unique(songs$genre)
+grepl('hip hop',unique(songs$genre)[8])  
+
+HipHopSongs=c()
+for (i in 1:length(unique(songs$genre))){
+  if (grepl('Hip Hop',unique(songs$genre)[i]) 
+      || grepl('rap',unique(songs$genre)[i] )
+      ||grepl('RAP',unique(songs$genre)[i] )
+      ||grepl('Rap',unique(songs$genre)[i] )
+      ||grepl('hip hop',unique(songs$genre)[i] )
+      ||grepl('Hip-Hop',unique(songs$genre)[i] )
+      ||grepl('R&B',unique(songs$genre)[i] )
+      ){
+    HipHopSongs=append(HipHopSongs,unique(songs$genre)[i])
+  }
+}
+SongRap=songs[songs$genre %in% HipHopSongs,]
+
+
+```
+
+
+
+Writing new db with just artits, song and albums with hip hop, rap and rnb genres
+```{r}
+
+
+write_csv(ArtistRap,"Artist_HipHop_Only.csv")
+write_csv(albumRap,"Album_HipHop_Only.csv")
+write_csv(SongRap,"Song_HipHop_Only.csv")
+
+
+
+```
+
+
+Erase all memory because the project is too heavy, but I will re read what I just write
+```{r}
+rm(list=ls())
+```
+
+Re reading of needed databases
+```{r}
+
+
+song=read.csv("Song_HipHop_Only.csv")
+artist=read.csv("artist_HipHop_Only.csv")
+album=read.csv("album_HipHop_Only.csv")
+
+
+
+```
+
+
+Starting to make some data cleaning
+
+```{r}
+
+
+for(i in 1:ncol(artist)) {      
+  artist[i][artist[i]==""]="unknown"
+  artist[i][artist[i]=="NULL"]="unknown"
+}
+
+for(i in 1:ncol(album)) {       # for-loop over columns
+  album[i][album[i]==""]="unknown"
+  album[i][album[i]=="NULL"]="unknown"
+}
+
+for(i in 1:ncol(song)) {       # for-loop over columns
+  song[i][song[i]==""]="unknown"
+  song[i][song[i]=="NULL"]="unknown"
+}
+
+
+song=select(song,-position,-lyrics,-explicitLyrics)
+song=select(song,-isClassic,-repeatedness,-subject)
+artist=select(artist,-id_artist_discogs,-dbp_genre)
+
+
+
+```
+
+Start running some test in order to see what I should keep, change or remove
+```{r}
+
+#song$award[14]
+#song$award[song$award!="list()"]  #Display every songs with award
+#Asap rocky id : 56d7e9cc6b60c09814f93f74 for exemple   
+#album$title[album$id_artist=="56d7e9cc6b60c09814f93f74"]
+#award=song$award[song$award!="list()"]
+#bestAward=award[order(nchar(award), award)][length(award)]
+#song$rank[song$award==award[1]]
+
+
+song=song %>% arrange(rank) 
+album=album %>% arrange(desc(as.numeric(deezerFans)))
+artist=artist %>% arrange(desc(as.numeric(deezerFans)))
+
+
+
+for(i in 1:ncol(song)) {       #0 rank is NA because we cant use it as rank as there is a lot of 0
+  song[i][song[i]=="0"]=NA
+}
+
+song=song[!is.na(song$rank),] #supress all NA value of rank because we will note use it 
+
+
+
+song <- song[!duplicated(song$rank), ] #Delete all same occurences of rank because its the same songs
+head(song)
+nrow(song)
+
+```
+Cleaning of song is finished, now we have 601 rap song with different rank and awards that we can use
+Now, let's proceed to cleaning of artists
+
+
+```{r}
+
+ #Artists will be in the ordered as deezerFans (as numeric because it was character) in a desc order
+
+# Reorder artist with deezerFans in first columns
+
+artist <- artist %>%           
+  dplyr::select("deezerFans", everything())
+album <- album %>%           
+  dplyr::select("deezerFans", everything())
+song <- song %>%           
+  dplyr::select("rank", everything())
+
+
+artist$deezerFans[artist$deezerFans=="unknown"]=NA
+
+artist=artist[!is.na(artist$deezerFans),] #supress all NA value of deezerFans because we will note use it 
+
+#artist$name[1:10] #list of the 10 most followed artist on deeze
+nrow(artist)
+```
+Cleaning of artist is now finished, we have 391 order by their deezerfans in desc order.
+Let's now proceed to the cleaning of albums
+
+
+```{r}
+head(album)
+
+# For now i will not clean this dataset because i am not sure to use it yet
+
+
+
+
+
+```
+
+Now that my dfs are cleaned and filtered, i will save it in case of trouble
+```{r}
+
+write_csv(artist,"SAVE_Artist_HipHop_Only.csv")
+write_csv(album,"SAVE_Album_HipHop_Only.csv")
+write_csv(song,"SAVE_Song_HipHop_Only.csv")
+
+```
+
+Some attempt at viz to check if db are usable
+```{r}
+
+#mostfan=artist%>% ggplot(aes(x=as.numeric(deezerFans)))+geom_bar()
+
+mostfan=head(artist,10)%>% 
+  ggplot(aes(x=name,y=as.numeric(deezerFans),fill=gender))+
+  geom_bar(stat='identity',position='dodge',width = 0.5)+
+  labs(title="Artist with the most deezer Fans",x="Artist",y="Deezer Fans")+
+  scale_fill_manual(values = c("#f9ebaf", "#1f2c33"))+
+  theme_classic()+
+  theme(plot.title = element_text(hjust = 0.5))+
+  scale_x_discrete(guide = guide_axis(n.dodge=3)) #in order to see the avoird overlapping of labels
+mostfan
+
+
+```
+
+Creating new columns in the song df so we can have the album name and artist name inside by using ids
+
+```{r}
+
+#Putting the name of the artist in the song dataframe with albumid :
+
+song_albumID=c(song$id_album)
+albumName=c()
+for (i in 1:length(song_albumID)){
+  if(song_albumID[i] %in% album$X_id){
+    albumName=append(albumName,album$title[album$X_id==song_albumID[i]])
+    idArtist=album$id_artist[album$X_id==song_albumID[i]]
+    
+  }else{
+    albumName=append(albumName,"unknown")
+  }
+}
+song=song%>%mutate(song,Album_Name=albumName)
+
+#As we dont have the artist id, it will be more complicate to put the artist name in song df :
+
+artistName=c()
+for (i in 1:length(song_albumID)){
+  if(song_albumID[i] %in% album$X_id){
+    idArtist=album$id_artist[album$X_id==song_albumID[i]]
+    if(idArtist %in% artist$id){
+      artistName=append(artistName,artist$name[artist$id==idArtist])
+    }else{
+      artistName=append(artistName,"unknown")
+    }
+  }else{
+    artistName=append(artistName,"unknown")
+  }
+}
+song=song%>%mutate(song,Artist_name=artistName) 
+
+#We know have the name of the song, artist and album in the song df
+
+unique(song$Artist_name)
+
+head(song,10)%>%ggplot(aes(x=Artist_name,y=rank))+geom_point()
+
+
+head(song,20)
+
+```
+
+Creating column of year publication in song df
+
+```{r}
+years=c()
+
+for (i in 1:nrow(song)){
+  years=append(years,substr(song$publicationDate[i],1,4)
+)
+}
+song=song%>%mutate(year_publication=years)
+
+
+```
+df ArtistwiThout0 in order to have a better scale in some plots
+```{r}
+
+artistWout0=artist[!artist$lifeSpan.ended==0,]
+artistWout0=artistWout0[!artistWout0$gender=="unknown",]
+nrow(artist)
+nrow(artistWout0)
+
+
+```
+
+
+
+```{r}
+
+rank=head(song,10) %>% ggplot(aes(x=title,y=as.numeric(rankHere)))+
+  geom_bar(stat='identity',position='dodge',width = 0.5)+
+  scale_x_discrete(guide = guide_axis(n.dodge=3))
+
+ggplotly(rank)
+
+
+
+song=song%>%mutate(rankHere=c(1:601))
+
+
+```
+
+```{r}
+
+
+rank2=filter(head(song,100),head(song,100)$year_publication>2000) %>% ggplot(aes(x=title,y=as.numeric(rankHere)))+
+  geom_bar(stat='identity',position='dodge',width = 0.5)+
+  scale_x_discrete(guide = guide_axis(n.dodge=3))+
+facet_wrap(facets =~ year_publication, scales = "free") 
+
+rank2
+#not very good here but would look good in shiny with interaction
+
+unique(song$year_publication)
+
+```
+
+```{r}
+head(artist,8)%>%ggplot(aes(x=name,y=substr(lifeSpan.begin,1,4),color=gender,size = deezerFans))+
+  geom_point()+
+  labs(title="Artist with the most deezer Fans",x="name of Artist",y="Begining of Career")+
+  scale_fill_manual(values = c("#f9ebaf", "#1f2c33","#1f2c33"))+
+  theme_classic()+
+  theme(plot.title = element_text(hjust = 0.5))
+  
+substr((artist$lifeSpan.begin),1,4)
+
+colnames(artist)
+head(artist)
+head(album)
+unique(song$Artist_name)
+nrow(song)
+```
+
+
+
+
+trying to add more artist name with a bigger df because there is a lot of unknown artist and album name
+```{r}
+
+songMoreArtist=song
+song_albumID2=c(songMoreArtist$id_album)
+moreArtist=read.csv("23K_artist.csv")
+moreAlbum=read.csv("62K_album.csv")
+  
+head(moreArtist)
+
+albumName2=c()
+for (i in 1:length(song_albumID2)){
+  if(song_albumID2[i] %in% moreAlbum$X_id){
+    albumName2=append(albumName2,moreAlbum$title[moreAlbum$X_id==song_albumID2[i]])
+    idArtist2=moreAlbum$id_artist[moreAlbum$X_id==song_albumID2[i]]
+    
+  }else{
+    albumName2=append(albumName2,"unknown")
+  }
+}
+songMoreArtist=songMoreArtist%>%mutate(songMoreArtist,Album_Name=albumName2)
+
+
+head(songMoreArtist,100)
+artistName2=c()
+
+for (i in 1:length(song_albumID2)){
+  if(song_albumID2[i] %in% moreAlbum$X_id){
+    idArtist2=moreAlbum$id_artist[moreAlbum$X_id==song_albumID2[i]]
+    if(idArtist2 %in% moreArtist$id){
+      artistName2=append(artistName2,moreArtist$name[moreArtist$id==idArtist2])
+    }else{
+      artistName2=append(artistName2,"unknown")
+    }
+  }else{
+    artistName2=append(artistName2,"unknown")
+  }
+}
+
+songMoreArtist=songMoreArtist%>%mutate(songMoreArtist,Artist_name=artistName2) 
+
+head(songMoreArtist,100)
+head(album)
+
+```
+
+Putting artist name into album df
+```{r}
+
+albumtest=album
+
+id_artist3=c(albumtest$id_artist)
+artistName3=c()
+for (i in 1:length(id_artist3)){
+  if(id_artist3[i] %in% moreArtist$id){
+    artistName3=append(artistName3,moreArtist$name[moreArtist$id==id_artist3[i]])
+  }else{
+    artistName3=append(artistName3,"unknown")
+  }
+}
+
+album=album%>%mutate(album,Artist_name=artistName3)
+
+head(albumTest,100)
+
+
+
+```
+
+
+
+save plot in cas (to delete !)
+```{r}
+head(artist,20)%>%ggplot(aes(x=name,y=substr(lifeSpan.begin,1,4),color=gender,size = deezerFans))+
+        geom_point()+
+        labs(title="Artist with the most deezer Fans",x="name of Artist",y="Begining of Career")+
+        scale_fill_manual(values = c("#f9ebaf", "#1f2c33","#1f2c33"))+
+        theme_classic()+
+        theme(plot.title = element_text(hjust = 0.5))
+      #rajouter un meilleur size scale et les noms du top 10 ou 20
+
+
+
+```
+
+```{r}
+head(artistWout0)
+
+unique(head(songMoreArtist$Artist_name,100))
+
+table(df$supp, df$dose)
+table(songMoreArtist$Artist_name)
+as.numeric(sort(table(songMoreArtist$Artist_name),decreasing = TRUE)[1])
+
+length(sort(table(head(songMoreArtist$Artist_name,100)),decreasing = TRUE))
+
+top=100
+table=sort(table(head(songMoreArtist$Artist_name,100)),decreasing = TRUE)[1]
+
+
+name=c()
+valeur=c()
+
+for (i in 1:length(sort(table(head(songMoreArtist$Artist_name,100)),decreasing = TRUE))){
+  name=append(name,names(sort(table(songMoreArtist$Artist_name),decreasing = TRUE)[i]))
+  valeur=append(valeur,as.numeric(sort(table(songMoreArtist$Artist_name),decreasing = TRUE)[i]))
+}
+
+name
+valeur
+
+
+name2=c(name[1:10],"others")
+valeur2=c(valeur[1:10],sum(valeur[11:length(valeur)]))
+name2
+valeur2
+
+df=data.frame(name,valeur)
+df2=data.frame(name2,valeur2)
+head(df2,20)%>%ggplot(aes(x="", y=valeur, fill=name)) +
+  geom_bar(stat="identity", width=1,color='white') +
+  coord_polar("y", start=0) +
+  theme_void()+
+  geom_text(aes(x = 1.6, label = valeur,hjust=12))
+
+
+```
+
+
+```{r}
+artistKnown2=artist[!artist$lifeSpan.begin=="unknown",]
+artistKnown2=artistKnown2[!artistKnown2$deezerFans==0,]
+artistKnown2=artistKnown2[!artistKnown2$gender=="unknown",]
+
+
+unique(artistKnown2$deezerFans)
+```
+
+
+```{r}
+
+#sauvegarde :
+
+artistKnown=artist[!artist$lifeSpan.begin=="unknown",]
+      artistKnown=artist[!artist$deezerFans==0,]
+      artistKnown=artist[!artist$gender=="unknown",]
+      
+      artistKnown%>%ggplot(aes(x=as.integer(substr(lifeSpan.begin,1,4)),y=as.integer(deezerFans),color=gender))+
+        geom_point()+
+        facet_wrap(facets=~ gender)+
+        labs(title="Comparaision of popularity by gender",x="Begining of Career",y="Deezer Fans")+
+        geom_text_repel(aes(label = name))
+```
+
+```{r}
+
+#sauvegard :
+
+name=c()
+      valeur=c()
+      
+      for (i in 1:length(sort(table(head(songMoreArtist$Artist_name,100)),decreasing = TRUE))){
+        name=append(name,names(sort(table(songMoreArtist$Artist_name),decreasing = TRUE)[i]))
+        valeur=append(valeur,as.numeric(sort(table(songMoreArtist$Artist_name),decreasing = TRUE)[i]))
+      }
+      
+      name
+      valeur
+      
+      df=data.frame(name,valeur)
+      
+      head(df,100)%>%ggplot(aes(x="", y=valeur, fill=name)) +
+        geom_bar(stat="identity", width=1,color='white') +
+        coord_polar("y", start=0) +
+        theme_void()+
+        geom_text(aes(x = 1.6, label = valeur,hjust=12))
+
+```
+
+Sauvegard chart 1 oh shiny :
+
+```{r}
+
+if(input$var==1){ #Song
+        songByYear=songMoreArtist[songMoreArtist$year_publication==input$year,]
+        head(songByYear,10) %>% ggplot(aes(x=reorder(title,rankHere),y=rankHere))+
+          geom_bar(stat='identity',position='dodge',width = 0.5,fill=input$radio)+
+          scale_x_discrete(guide = guide_axis(n.dodge=3))+labs(title=paste("Most Popular Hip Hop songs in",input$year),x="Song Titles",y="Song ranks")+
+          geom_text(aes(label = c(head(songByYear,10)$Artist_name)),vjust = 1.5, colour = "black")
+        
+      }
+
+#install.packages("DataExplorer")
+#library(DataExplorer)
+#DataExplorer::create_repor(songMoreArtist)
+
+head(artist)
+```
+
+```{r}
+
+colnames(song)
+#FAIRE UN TRUC AVEC TOUT LES AWARD DES ARTISTE AU NOM DE JEAN 
+unique(song$award)
+
+songAwardAll=songMoreArtist[!songMoreArtist$award=="list()",]
+sort(table(songAwardAll$Artist_name),decreasing=TRUE)[1:10]
+
+
+#silver - gold - platinum - million
+unique(song$award)
+#songAwardSilver=songMoreArtist[songMoreArtist$award==""]
+songAwardSilver=dplyr::filter(songMoreArtist, grepl('Silver', award))
+songAwardGold=dplyr::filter(songMoreArtist, grepl('Gold', award))
+songAwardPlatinum=dplyr::filter(songMoreArtist, grepl('Platinum', award))
+songAwardMillion=dplyr::filter(songMoreArtist, grepl('Million', award))
+
+songAwardPlatinum
+#sort(table(songAward$Artist_name),decreasing=TRUE)[1:10]
+
+
+
+#grepl("silver",songMoreArtist$award)
+
+songAward=dplyr::filter(songMoreArtist, grepl('Gold', award))
+tableAward=sort(table(songAward$Artist_name),decreasing=TRUE)
+dfAward=as.data.frame(tableAward)
+dfAward
+
+head(dfAward,10) %>% ggplot(aes(x=Freq,y="",label=Var1,fill=Var1))+
+  geom_bar(stat="identity",width=1,color="white")+
+  coord_polar("x",start=0)+
+  theme_void()+
+  geom_text(hjust=2)
+
+```
+
+
+
+SAUVEGARD PLOT 5 PIE CHART
+```{r}
+
+#addTooltip(session, id = "someInput", title = "This is an input.",
+         #          placement = "left", trigger = "hover")
+        
+library(plotly)
+name=c()
+valeur=c()
+for (i in 1:length(sort(table(head(songMoreArtist$Artist_name,100)),decreasing = TRUE))){
+  name=append(name,names(sort(table(songMoreArtist$Artist_name),decreasing = TRUE)[i]))
+  valeur=append(valeur,as.numeric(sort(table(songMoreArtist$Artist_name),decreasing = TRUE)[i]))
+}
+name
+valeur
+
+df=data.frame(name,valeur)
+
+testTooltip<-head(df,10)%>%ggplot(aes(x=head(df$valeur,10), y="", fill=name,label=name)) +
+  geom_bar(stat="identity", width=1,color='white') +
+  coord_polar("x",start=0) +
+  theme_void()+
+  geom_text_repel()+
+  labs(title="Comparaision of popularity between men and women")
+plotly(testTooltip)
+        #A FINIR C BIDON
+        #voir si on peut faire un autre plot avec carte ville/meilleur artist with gg plot
+
+
+
+```
+song rank test
+```{r}
+songByYear=songMoreArtist[songMoreArtist$year_publication==input$year,]
+        
+        
+        head(songByYear,10) %>% ggplot(aes(x=reorder(title,rankHere),y=as.numeric(rankHere)))+
+          geom_bar(stat='identity',position='dodge',width = 0.5,fill=input$radio)+labs(title=paste("Most Popular Hip Hop songs in",input$year),x="Song Titles",y="Song ranks")+
+          coord_flip()+
+          #scale_x_discrete(limits = rev(levels(as.factor(head(songByYear$rankHere,10)))))+
+          #scale_y_reverse()+
+          #scale_x_discrete(limits = rev(levels(songByYear$rankHere)))+
+          geom_text(aes(label = c(head(songByYear,10)$Artist_name)),vjust = 1.5, colour = "black")
+```
+
+
+```{r}
+songMoreArtist[songMoreArtist$title=="Ring The Alarm",]
+songMoreArtist2 <- songMoreArtist[!duplicated(song$title), ]
+
+nrow(songMoreArtist2)
+```
+
+```{r}
+tableAward=sort(table(songAward$Artist_name),decreasing=TRUE)
+dfAward=as.data.frame(tableAward)
+dfAward
+
+dfAward %>% filter(as.numeric(Freq)>8)
+
+dfAward$Var1=as.numeric(dfAward$Var1)
+dfAward$Freq=as.numeric(dfAward$Freq)
+
+df
+
+
+
+```
+
+Sauvegarde award 5 ça ma gonflé 
+
+```{r}
+
+else if(input$var==5){
+        
+        if (input$award=="Silver"){
+          songAward=dplyr::filter(songMoreArtist, grepl('Silver', award))
+        }
+        else if (input$award=="Gold"){
+          songAward=dplyr::filter(songMoreArtist, grepl('Gold', award))
+        }
+        else if (input$award=="Platinum"){
+          songAward=dplyr::filter(songMoreArtist, grepl('Platinum', award))
+          
+        }
+        else if (input$award=="Million"){
+          songAward=dplyr::filter(songMoreArtist, grepl('Million', award))
+        }
+      
+        
+        tableAward=sort(table(songAward$Artist_name),decreasing=TRUE)
+        dfAward=as.data.frame(tableAward)
+        dfAward
+        dfAward$Freq=as.numeric(dfAward$Freq)
+        head(dfAward,10) %>% ggplot(aes(x=Freq,y="",label=Freq,fill=Var1))+
+          geom_bar(stat="identity",width=1,color="white")+
+          coord_polar("x",start=0)+
+          scale_y_discrete(breaks = seq(0, 20), 20, 
+                             labels = c(0:20))+
+          theme_void()+
+          geom_text()+
+          scale_fill_brewer(palette="Set1")
+          #scale_fill_gradient(low="yellow", high="red")
+          
+}
+
+
+
+
+
+```
+
+save plot 1 
+```{r}
+
+songByYear=songMoreArtist2[songMoreArtist2$year_publication==1999,]
+        songByYear$rankHere=c(length(songByYear$rankHere):1)#to have rank reversed
+        #songByYear2=songByYear%>% mutate(songByYear,rankplot1=c(1))
+        plot1=head(songByYear,10) %>% ggplot(aes(x=reorder(title,rankHere),y=as.numeric(rankHere),fill=rankHere))+
+          geom_bar(stat='identity',position='stack')+labs(title=paste("Best ranked Hip Hop songs on Deezer in1999")
+                                                          ,x="Song Titles",y="Song ranks")+
+          #coord_flip()+
+          geom_text(aes(label = c(head(songByYear,10)$Artist_name)),vjust = 1.5, colour = "black")+
+          #geom_text(aes(label = c(0:length(head(songByYear,10))),vjust = 1.5, colour = "black"))+
+          theme_classic()+
+          scale_x_discrete(guide = guide_axis(n.dodge=3))
+          #theme(axis.text.x=element_blank(),
+                #axis.ticks.x=element_blank())+
+          #theme(legend.position = "none")  
+plot1
+
+```
+
+
+test tooltip
+
+```{r}
+
+plot4=artistKnown%>%ggplot(aes(x=as.integer(substr(lifeSpan.begin,1,4)),y=as.integer(deezerFans),color=gender,text=paste0("name :", name)))+
+          geom_point()+
+          facet_wrap(facets=~ gender)+
+          labs(title="Comparaision of popularity by gender",x="Begining of Career",y="Deezer Fans")+
+          geom_text_repel(aes(label = name))
+        
+        ggplotly(plot4)
+        
+colnames(artistKnown)
+
+```
+
